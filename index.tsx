@@ -15,13 +15,17 @@ const ratelimit = new Ratelimit({
 
 const app = new Elysia()
   .use(html())
-  .onBeforeHandle(async ({ request, status }) => {
+  .onBeforeHandle(async ({ request, status, set }) => {
     const ip = app.server?.requestIP(request)
     if (!ip?.address) {
       return status(400, { error: 'No ip address could be found to parse' })
     }
 
-    const { success } = await ratelimit.limit(ip.address)
+    const { success, remaining, reset } = await ratelimit.limit(ip.address)
+
+    set.headers['x-ratelimit-remaining'] = remaining.toString()
+    set.headers['x-ratelimit-reset'] = String(reset)
+
     if (!success) {
       return status(429, 'To many requests')
     }
