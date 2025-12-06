@@ -10,7 +10,7 @@ import { Ratelimit, slidingWindow } from 'bunlimit'
 
 const ratelimit = new Ratelimit({
   redis,
-  limiter: slidingWindow(2, 60_000),
+  limiter: slidingWindow(6, 67_000),
 })
 
 const app = new Elysia()
