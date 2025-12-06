@@ -2,13 +2,32 @@ import Elysia, { t } from 'elysia'
 import { html, Html } from '@elysiajs/html'
 import QRCode from 'qrcode'
 import { zeroId } from 'zero-id'
-import { s3 } from 'bun'
+import { redis, s3 } from 'bun'
 import { db } from './drizzle'
 import { qrCodesTable } from './drizzle/schema'
 import { eq } from 'drizzle-orm'
+import { Ratelimit, fixedWindow } from 'bunlimit'
+
+const ratelimit = new Ratelimit({
+  redis,
+  limiter: fixedWindow(3, 30),
+})
 
 const app = new Elysia()
   .use(html())
+  .onBeforeHandle(async ({ request, status }) => {
+    const ip = app.server?.requestIP(request)
+    if (!ip?.address) {
+      status(403)
+      return { error: 'No ip address could be found to parse' }
+    }
+
+    const { success } = await ratelimit.limit(ip.address)
+    if (!success) {
+      status(429)
+      return 'To many requests'
+    }
+  })
   .get('/', () => (
     <html lang='en'>
       <head>

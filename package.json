@@ -19,6 +19,7 @@
   "dependencies": {
     "@elysiajs/html": "^1.4.0",
     "@types/qrcode": "^1.5.6",
+    "bunlimit": "^0.1.4",
     "drizzle-orm": "^0.45.0",
     "elysia": "^1.4.18",
     "qrcode": "^1.5.4",
