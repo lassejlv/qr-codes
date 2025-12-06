@@ -10,7 +10,7 @@ import { Ratelimit, fixedWindow } from 'bunlimit'
 
 const ratelimit = new Ratelimit({
   redis,
-  limiter: fixedWindow(3, 30),
+  limiter: fixedWindow(3, 30_300),
 })
 
 const app = new Elysia()
@@ -18,14 +18,12 @@ const app = new Elysia()
   .onBeforeHandle(async ({ request, status }) => {
     const ip = app.server?.requestIP(request)
     if (!ip?.address) {
-      status(403)
-      return { error: 'No ip address could be found to parse' }
+      return status(400, { error: 'No ip address could be found to parse' })
     }
 
     const { success } = await ratelimit.limit(ip.address)
     if (!success) {
-      status(429)
-      return 'To many requests'
+      return status(429, 'To many requests')
     }
   })
   .get('/', () => (
@@ -69,8 +67,7 @@ const app = new Elysia()
 
         return redirect(`/view?id=${qrCode[0]!.id}`)
       } catch (error) {
-        status(500)
-        return { error }
+        return status(500, { error })
       }
     },
     {
@@ -98,8 +95,7 @@ const app = new Elysia()
           </html>
         )
       } catch (error) {
-        status(500)
-        return { error }
+        status(500, { error })
       }
     },
     {
