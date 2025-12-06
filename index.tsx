@@ -6,11 +6,11 @@ import { redis, s3 } from 'bun'
 import { db } from './drizzle'
 import { qrCodesTable } from './drizzle/schema'
 import { eq } from 'drizzle-orm'
-import { Ratelimit, fixedWindow } from 'bunlimit'
+import { Ratelimit, slidingWindow } from 'bunlimit'
 
 const ratelimit = new Ratelimit({
   redis,
-  limiter: fixedWindow(3, 30_300),
+  limiter: slidingWindow(2, 60_000),
 })
 
 const app = new Elysia()
