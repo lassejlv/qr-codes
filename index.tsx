@@ -3,12 +3,11 @@ import { getConnInfo } from 'hono/bun'
 import { zValidator } from '@hono/zod-validator'
 import { zeroId } from 'zero-id'
 import { redis, s3 } from 'bun'
-import { db } from './drizzle'
-import { qrCodesTable } from './drizzle/schema'
-import { eq } from 'drizzle-orm'
 import { Ratelimit, fixedWindow } from 'bunlimit'
-import { createQrSchema, viewQrSchema } from './lib/schema'
+import { createQrSchema } from './lib/schema'
 import { generateQrCode } from './lib/qr'
+import { prisma } from './lib/prisma'
+import consola from 'consola'
 
 const ratelimit = new Ratelimit({
   redis,
@@ -63,30 +62,38 @@ app.post('/new', zValidator('form', createQrSchema), async (c) => {
     const key = `/${id}.png`
     await s3.write(key, file)
 
-    const qrCode = await db
-      .insert(qrCodesTable)
-      .values({
+    const qrCode = await prisma.qRCode.create({
+      data: {
         fileKey: key,
         encodeText: encodeText,
-      })
-      .returning({ id: qrCodesTable.id })
+      },
+    })
 
-    return c.redirect(`/view/${qrCode[0]!.id}`)
+    return c.redirect(`/view/${qrCode.id}`)
   } catch (error) {
     return c.json({ error }, 500)
   }
 })
 
-app.get('/view/:id', zValidator('param', viewQrSchema), async (c) => {
+app.get('/view/:id', async (c) => {
   try {
-    const { id } = c.req.valid('param')
-    const qrCode = await db.query.qrCodesTable.findFirst({
-      where: eq(qrCodesTable.id, id),
+    const id = c.req.param('id')
+
+    const qrCode = await prisma.qRCode.findUnique({
+      where: {
+        id,
+      },
     })
+
     if (!qrCode) throw new Error('QR code was not found')
 
     const preUrl = s3.presign(qrCode.fileKey)
-    return c.redirect(preUrl)
+
+    return c.render(
+      <>
+        <img src={preUrl} width={512} height={512} loading='lazy' />
+      </>
+    )
   } catch (error) {
     return c.json({ error }, 500)
   }
@@ -97,4 +104,4 @@ export default {
   fetch: app.fetch,
 }
 
-console.log(`Server running at http://localhost:3000`)
+consola.success(`Server running at http://localhost:3000`)

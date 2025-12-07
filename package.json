@@ -3,13 +3,13 @@
   "module": "index.tsx",
   "scripts": {
     "dev": "bun --watch .",
-    "build": "bun build --compile --minify . --outfile app",
-    "start": "bun --bun drizzle-kit migrate && ./app"
+    "build": "bun prisma migrate deploy && bun prisma generate && bun build --compile --minify . --outfile app",
+    "start": "./app"
   },
   "devDependencies": {
     "@libsql/client": "^0.15.15",
     "@types/bun": "^1.3.3",
-    "drizzle-kit": "^0.31.8"
+    "dotenv": "^17.2.3"
   },
   "peerDependencies": {
     "typescript": "^5"
@@ -18,10 +18,13 @@
   "type": "module",
   "dependencies": {
     "@hono/zod-validator": "^0.7.5",
+    "@prisma/adapter-better-sqlite3": "^7.1.0",
+    "@prisma/client": "^7.1.0",
     "@types/qrcode": "^1.5.6",
     "bunlimit": "^0.1.4",
-    "drizzle-orm": "^0.45.0",
+    "consola": "^3.4.2",
     "hono": "^4.10.7",
+    "prisma": "^7.1.0",
     "qrcode": "^1.5.4",
     "zero-id": "^0.0.6",
     "zod": "^4.1.13"
