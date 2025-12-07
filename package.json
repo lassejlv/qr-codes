@@ -17,11 +17,11 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@elysiajs/html": "^1.4.0",
+    "@hono/zod-validator": "^0.7.5",
     "@types/qrcode": "^1.5.6",
     "bunlimit": "^0.1.4",
     "drizzle-orm": "^0.45.0",
-    "elysia": "^1.4.18",
+    "hono": "^4.10.7",
     "qrcode": "^1.5.4",
     "zero-id": "^0.0.6",
     "zod": "^4.1.13"

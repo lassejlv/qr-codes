@@ -1,5 +1,7 @@
-import Elysia, { t } from 'elysia'
-import { html, Html } from '@elysiajs/html'
+import { Hono } from 'hono'
+import { getConnInfo } from 'hono/bun'
+import { z } from 'zod'
+import { zValidator } from '@hono/zod-validator'
 import QRCode from 'qrcode'
 import { zeroId } from 'zero-id'
 import { redis, s3 } from 'bun'
@@ -13,101 +15,120 @@ const ratelimit = new Ratelimit({
   limiter: fixedWindow(100, 60_000),
 })
 
-const app = new Elysia()
-  .use(html())
-  .onBeforeHandle(async ({ request, status, set }) => {
-    const ip = app.server?.requestIP(request)
-    if (!ip?.address) {
-      return status(400, { error: 'No ip address could be found to parse' })
-    }
+const app = new Hono()
 
-    const { success, remaining, reset } = await ratelimit.limit(ip.address)
+app.use('*', async (c, next) => {
+  const info = getConnInfo(c)
 
-    set.headers['x-ratelimit-remaining'] = remaining.toString()
-    set.headers['x-ratelimit-reset'] = String(reset)
+  if (!info.remote.address) {
+    return c.json({ error: 'No ip address could be found to parse' }, 400)
+  }
 
-    if (!success) {
-      return status(429, 'To many requests')
-    }
-  })
-  .get('/', () => (
+  const { success, remaining, reset } = await ratelimit.limit(info.remote.address)
+
+  c.header('x-ratelimit-remaining', remaining.toString())
+  c.header('x-ratelimit-reset', String(reset))
+
+  if (!success) {
+    return c.text('To many requests', 429)
+  }
+
+  await next()
+})
+
+app.get('/', (c) => {
+  return c.render(
     <html lang='en'>
       <head>
         <title>Make a qr code lol</title>
       </head>
       <body>
-        <form method='POST' action='/new'>
+        <form method='post' action='/new'>
           <input placeholder='encodeText' name='encodeText' required />
 
           <button type='submit'>Submit</button>
         </form>
       </body>
     </html>
-  ))
-  .post(
-    '/new',
-    async ({ body, status, redirect }) => {
-      try {
-        const file = await QRCode.toBuffer(body.encodeText, {
-          errorCorrectionLevel: 'H',
-          color: {
-            dark: '#000',
-            light: '#fff',
-          },
-          width: 256,
+  )
+})
+
+app.post(
+  '/new',
+  zValidator(
+    'form',
+    z.object({
+      encodeText: z.string().min(7).max(500),
+    })
+  ),
+  async (c) => {
+    try {
+      const { encodeText } = c.req.valid('form')
+
+      const file = await QRCode.toBuffer(encodeText, {
+        errorCorrectionLevel: 'H',
+        color: {
+          dark: '#000',
+          light: '#fff',
+        },
+        width: 256,
+      })
+
+      const id = zeroId(20)
+      const key = `/${id}.png`
+      await s3.write(key, file)
+
+      const qrCode = await db
+        .insert(qrCodesTable)
+        .values({
+          fileKey: key,
+          encodeText: encodeText,
         })
+        .returning({ id: qrCodesTable.id })
 
-        const id = zeroId(20)
-        const key = `/${id}.png`
-        await s3.write(key, file)
-
-        const qrCode = await db
-          .insert(qrCodesTable)
-          .values({
-            fileKey: key,
-            encodeText: body.encodeText,
-          })
-          .returning({ id: qrCodesTable.id })
-
-        return redirect(`/view?id=${qrCode[0]!.id}`)
-      } catch (error) {
-        return status(500, { error })
-      }
-    },
-    {
-      body: t.Object({
-        encodeText: t.String({ minLength: 7, maxLength: 500 }),
-      }),
+      return c.redirect(`/view?id=${qrCode[0]!.id}`)
+    } catch (error) {
+      return c.json({ error }, 500)
     }
-  )
-  .get(
-    '/view',
-    async ({ query, status }) => {
-      try {
-        const qrCode = await db.query.qrCodesTable.findFirst({ where: eq(qrCodesTable.id, query.id) })
-        if (!qrCode) throw new Error('QR code was not found')
+  }
+)
 
-        const preUrl = s3.presign(qrCode.fileKey)
-        return (
-          <html lang='en'>
-            <head>
-              <title>{qrCode.id}</title>
-            </head>
-            <body>
-              <img src={preUrl} width={512} height={512} />
-            </body>
-          </html>
-        )
-      } catch (error) {
-        status(500, { error })
-      }
-    },
-    {
-      query: t.Object({
-        id: t.String({ minLength: 5, maxLength: 30 }),
-      }),
+app.get(
+  '/view',
+  zValidator(
+    'query',
+    z.object({
+      id: z.string().min(5).max(30),
+    })
+  ),
+  async (c) => {
+    try {
+      const { id } = c.req.valid('query')
+      const qrCode = await db.query.qrCodesTable.findFirst({
+        where: eq(qrCodesTable.id, id),
+      })
+      if (!qrCode) throw new Error('QR code was not found')
+
+      const preUrl = s3.presign(qrCode.fileKey)
+      return c.render(
+        <html lang='en'>
+          <head>
+            <title>{qrCode.id}</title>
+          </head>
+          <body>
+            <img src={preUrl} width={512} height={512} />
+          </body>
+        </html>
+      )
+    } catch (error) {
+      return c.json({ error }, 500)
     }
-  )
-  .listen(3000)
+  }
+)
 
-console.log(`Server running at http://${app.server?.hostname}:${app.server?.port}`)
+export default {
+  port: 3000,
+  fetch: app.fetch,
+}
+
+console.log(`Server running at http://localhost:3000`)

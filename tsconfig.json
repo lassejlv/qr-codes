@@ -6,9 +6,8 @@
     "module": "Preserve",
     "moduleDetection": "force",
     "allowJs": true,
-    "jsx": "react",
-    "jsxFactory": "Html.createElement",
-    "jsxFragmentFactory": "Html.Fragment",
+    "jsx": "react-jsx",
+    "jsxImportSource": "hono/jsx",
 
     // Bundler mode
     "moduleResolution": "bundler",
