@@ -1,14 +1,14 @@
 import { Hono } from 'hono'
 import { getConnInfo } from 'hono/bun'
-import { z } from 'zod'
 import { zValidator } from '@hono/zod-validator'
-import QRCode from 'qrcode'
 import { zeroId } from 'zero-id'
 import { redis, s3 } from 'bun'
 import { db } from './drizzle'
 import { qrCodesTable } from './drizzle/schema'
 import { eq } from 'drizzle-orm'
 import { Ratelimit, fixedWindow } from 'bunlimit'
+import { createQrSchema, viewQrSchema } from './lib/schema'
+import { generateQrCode } from './lib/qr'
 
 const ratelimit = new Ratelimit({
   redis,
@@ -53,78 +53,53 @@ app.get('/', (c) => {
   )
 })
 
-app.post(
-  '/new',
-  zValidator(
-    'form',
-    z.object({
-      encodeText: z.string().min(7).max(500),
-    })
-  ),
-  async (c) => {
-    try {
-      const { encodeText } = c.req.valid('form')
+app.post('/new', zValidator('form', createQrSchema), async (c) => {
+  try {
+    const { encodeText } = c.req.valid('form')
 
-      const file = await QRCode.toBuffer(encodeText, {
-        errorCorrectionLevel: 'H',
-        color: {
-          dark: '#000',
-          light: '#fff',
-        },
-        width: 256,
+    const file = await generateQrCode(encodeText)
+
+    const id = zeroId(20)
+    const key = `/${id}.png`
+    await s3.write(key, file)
+
+    const qrCode = await db
+      .insert(qrCodesTable)
+      .values({
+        fileKey: key,
+        encodeText: encodeText,
       })
+      .returning({ id: qrCodesTable.id })
 
-      const id = zeroId(20)
-      const key = `/${id}.png`
-      await s3.write(key, file)
-
-      const qrCode = await db
-        .insert(qrCodesTable)
-        .values({
-          fileKey: key,
-          encodeText: encodeText,
-        })
-        .returning({ id: qrCodesTable.id })
-
-      return c.redirect(`/view?id=${qrCode[0]!.id}`)
-    } catch (error) {
-      return c.json({ error }, 500)
-    }
+    return c.redirect(`/view?id=${qrCode[0]!.id}`)
+  } catch (error) {
+    return c.json({ error }, 500)
   }
-)
+})
 
-app.get(
-  '/view',
-  zValidator(
-    'query',
-    z.object({
-      id: z.string().min(5).max(30),
+app.get('/view', zValidator('query', viewQrSchema), async (c) => {
+  try {
+    const { id } = c.req.valid('query')
+    const qrCode = await db.query.qrCodesTable.findFirst({
+      where: eq(qrCodesTable.id, id),
     })
-  ),
-  async (c) => {
-    try {
-      const { id } = c.req.valid('query')
-      const qrCode = await db.query.qrCodesTable.findFirst({
-        where: eq(qrCodesTable.id, id),
-      })
-      if (!qrCode) throw new Error('QR code was not found')
+    if (!qrCode) throw new Error('QR code was not found')
 
-      const preUrl = s3.presign(qrCode.fileKey)
-      return c.render(
-        <html lang='en'>
-          <head>
-            <title>{qrCode.id}</title>
-          </head>
-          <body>
-            <img src={preUrl} width={512} height={512} />
-          </body>
-        </html>
-      )
-    } catch (error) {
-      return c.json({ error }, 500)
-    }
+    const preUrl = s3.presign(qrCode.fileKey)
+    return c.render(
+      <html lang='en'>
+        <head>
+          <title>{qrCode.id}</title>
+        </head>
+        <body>
+          <img src={preUrl} width={512} height={512} />
+        </body>
+      </html>
+    )
+  } catch (error) {
+    return c.json({ error }, 500)
   }
-)
+})
 
 export default {
   port: 3000,
