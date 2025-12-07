@@ -7,7 +7,6 @@ import { Ratelimit, fixedWindow } from 'bunlimit'
 import { createQrSchema } from './lib/schema'
 import { generateQrCode } from './lib/qr'
 import { prisma } from './lib/prisma'
-import consola from 'consola'
 
 const ratelimit = new Ratelimit({
   redis,
@@ -71,7 +70,8 @@ app.post('/new', zValidator('form', createQrSchema), async (c) => {
 
     return c.redirect(`/view/${qrCode.id}`)
   } catch (error) {
-    return c.json({ error }, 500)
+    const err = error as Error
+    return c.json({ name: err.name, message: err.message, stack: err.stack, cause: err.cause }, 500)
   }
 })
 
@@ -95,7 +95,8 @@ app.get('/view/:id', async (c) => {
       </>
     )
   } catch (error) {
-    return c.json({ error }, 500)
+    const err = error as Error
+    return c.json({ name: err.name, message: err.message, stack: err.stack, cause: err.cause }, 500)
   }
 })
 
@@ -103,5 +104,3 @@ export default {
   port: 3000,
   fetch: app.fetch,
 }
-
-consola.success(`Server running at http://localhost:3000`)

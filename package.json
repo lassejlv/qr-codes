@@ -18,11 +18,10 @@
   "type": "module",
   "dependencies": {
     "@hono/zod-validator": "^0.7.5",
-    "@prisma/adapter-better-sqlite3": "^7.1.0",
+    "@prisma/adapter-libsql": "^7.1.0",
     "@prisma/client": "^7.1.0",
     "@types/qrcode": "^1.5.6",
     "bunlimit": "^0.1.4",
-    "consola": "^3.4.2",
     "hono": "^4.10.7",
     "prisma": "^7.1.0",
     "qrcode": "^1.5.4",
