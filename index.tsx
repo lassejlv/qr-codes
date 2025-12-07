@@ -71,31 +71,22 @@ app.post('/new', zValidator('form', createQrSchema), async (c) => {
       })
       .returning({ id: qrCodesTable.id })
 
-    return c.redirect(`/view?id=${qrCode[0]!.id}`)
+    return c.redirect(`/view/${qrCode[0]!.id}`)
   } catch (error) {
     return c.json({ error }, 500)
   }
 })
 
-app.get('/view', zValidator('query', viewQrSchema), async (c) => {
+app.get('/view/:id', zValidator('param', viewQrSchema), async (c) => {
   try {
-    const { id } = c.req.valid('query')
+    const { id } = c.req.valid('param')
     const qrCode = await db.query.qrCodesTable.findFirst({
       where: eq(qrCodesTable.id, id),
     })
     if (!qrCode) throw new Error('QR code was not found')
 
     const preUrl = s3.presign(qrCode.fileKey)
-    return c.render(
-      <html lang='en'>
-        <head>
-          <title>{qrCode.id}</title>
-        </head>
-        <body>
-          <img src={preUrl} width={512} height={512} />
-        </body>
-      </html>
-    )
+    return c.redirect(preUrl)
   } catch (error) {
     return c.json({ error }, 500)
   }
